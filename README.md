@@ -4,7 +4,7 @@
 > simple and easy on memory" - **androvonx95**
 
 > Zeptex is a WIP text editor written by **androvonx95**. It is planned to be added soon
-> after a little development so that it works.
+> after a little development so that it works. - **callmesalmon**
 
 ## About
 A minimal, lightweight text editor designed for kernel shell environments.
