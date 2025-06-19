@@ -1,68 +1,54 @@
-/*
-* Copyright (c) Salmon 2025 under the ANTIFA-MIT license.
-* If your copy of this program doesn't include the license, it is
-* available to read at: 
-*
-*     https://github.com/jamiebuilds/anti-fascist-mit-license
+/* editor.h - public interface for the ultra-minimal line editor
+   Extracted from editor.c so other translation units can interact
+   with the editor or re-use its primitives.
 */
-
-#pragma once
-
-#include <io.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <mem.h>
-#include <fs/core.h>
-#include <magic.h>    
-#include <drivers/display.h>
-#include <stdint.h>
+#include <unistd.h>
+#include <termios.h>
+#include <sys/ioctl.h>
 
-// Editor version
-#define EDITOR_VERSION "1.0"
+#ifndef EDITOR_H
+#define EDITOR_H
 
-// Editor configuration
-#define EDITOR_BUFFER_SIZE 256
-#define EDITOR_MAX_LINES 100
-#define SAFE_INPUT_MAX 255  // Maximum input length minus null terminator
+#include <stddef.h>   /* for size_t */
 
-// Editor state structure
-struct editor_state {
-    char lines[EDITOR_MAX_LINES][EDITOR_BUFFER_SIZE];
-    int line_count;
-    int display_start;  // Which line to start displaying
-    int display_end;    // Which line to end displaying
-};
+/*--------------------------------------------------------------------
+  Compile-time limits
+  (guarded so we do not complain if already defined elsewhere)
+ --------------------------------------------------------------------*/
+#ifndef MAX_LINES
+#define MAX_LINES 1000
+#endif
 
-// Safe input functions
-int safe_scan(char* buffer, int max_len);
+#ifndef MAX_LINE_LEN
+#define MAX_LINE_LEN 1024
+#endif
 
-// Display constants from kernel
-#define DISPLAY_WIDTH  80
-#define DISPLAY_HEIGHT 25
-#define COMMAND_LINE_HEIGHT (DISPLAY_HEIGHT - 1)
 
-// Screen buffer management
-#define VIDEO_MEMORY_OFFSET (uint*) 0xb8000
+/*--------------------------------------------------------------------
+  Global text buffer (very small editor = very small global state)
+ --------------------------------------------------------------------*/
+extern char *lines[MAX_LINES];   /* dynamically allocated lines       */
+extern size_t line_count;        /* number of active lines in buffer  */
 
-// Screen buffer functions
-uint get_offset(uint column, uint row);
-uint get_offset_row(uint offset);
-uint get_offset_column(uint offset);
-void set_cursor_position(uint column, uint row);
+/*--------------------------------------------------------------------
+  File I/O helpers
+ --------------------------------------------------------------------*/
+void load_file(const char *filename);
+void save_file(const char *filename);
 
-// File modes
-#define EDITOR_FILE_MODE_CREATE 1
-#define EDITOR_FILE_MODE_OPEN   2
+/*--------------------------------------------------------------------
+  Buffer manipulation
+ --------------------------------------------------------------------*/
+void insert_line(size_t index, const char *text);   /* 1-based index */
+void delete_line(size_t index);                     /* 1-based index */
 
-// Error codes
-#define EDITOR_ERR_NONE           0
-#define EDITOR_ERR_FILE_NOT_FOUND 1
-#define EDITOR_ERR_FILE_CREATE    2
-#define EDITOR_ERR_FILE_SAVE      3
-#define EDITOR_ERR_LINE_FULL      4
-#define EDITOR_ERR_MEMORY         5
+/*--------------------------------------------------------------------
+  UI helpers
+ --------------------------------------------------------------------*/
+void draw_buffer(void);
+void run_editor(const char *filename);
 
-/**
-* Launches the built-in line editor in kernel shell.
-* Allows editing a file interactively using a simple line-based interface.
-*/
-int ksh_editor();
+#endif /* editor_H */
