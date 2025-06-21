@@ -214,25 +214,107 @@ void run_editor(const char *filename) {
             cmd[cmd_len] = '\0';
 
             if (strcmp(cmd, "q") == 0) break;
+
             else if (cmd[0] == 'i') {
-                int line_no;
-                char text[MAX_LINE_LEN];
-                if (sscanf(cmd, "i %d %[^\n]", &line_no, text) == 2) {
-                    insert_line((size_t)line_no, text);
-
-                    struct winsize w;
-                    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-                    size_t screen_lines = (w.ws_row > 3) ? (w.ws_row - 3) : 1;
-
-                    // Auto-scroll if inserted line is below visible area
-                    if ((size_t)line_no > scroll_offset + screen_lines)
-                        scroll_offset = (size_t)line_no - screen_lines;
-
-                    // Clamp scroll_offset
-                    size_t max_scroll = (line_count > screen_lines) ? (line_count - screen_lines) : 0;
-                    if (scroll_offset > max_scroll) scroll_offset = max_scroll;
+                int line_no = 0;
+                char *p = cmd + 1; // points after 'i'
+                
+                // Check for exactly one space after 'i'
+                if (*p != ' ') {
+                    // invalid: no space immediately after 'i'
+                    draw_buffer();
+                    printf(": Invalid insert syntax. Use: i <line> <text>\n");
+                    fflush(stdout);
+                    goto after_command;
                 }
-            } else if (cmd[0] == 'd') {
+                p++; // move past that one space
+                
+                // Now parse the line number - must be integer, no leading spaces allowed
+                // So we scan digits from p until we find a space
+                
+                char *space_after_lineno = strchr(p, ' ');
+                if (!space_after_lineno) {
+                    // no space after lineno → no input text → invalid
+                    draw_buffer();
+                    printf(": Invalid insert syntax. Use: i <line> <text>\n");
+                    fflush(stdout);
+                    goto after_command;
+                }
+                
+                // Temporarily null terminate after lineno to parse it
+                *space_after_lineno = '\0';
+                line_no = atoi(p);
+                *space_after_lineno = ' '; // restore
+                
+                if (line_no <= 0) {
+                    draw_buffer();
+                    printf(": Invalid line number. Use: i <line> <text>\n");
+                    fflush(stdout);
+                    goto after_command;
+                }
+                
+                // The input text is everything after that space (including multiple spaces)
+                char *input_text = space_after_lineno + 1;
+                
+                insert_line((size_t)line_no, input_text);
+                
+                struct winsize w;
+                ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+                size_t screen_lines = (w.ws_row > 3) ? (w.ws_row - 3) : 1;
+            
+                if ((size_t)line_no > scroll_offset + screen_lines)
+                    scroll_offset = (size_t)line_no - screen_lines;
+            
+                size_t max_scroll = (line_count > screen_lines) ? (line_count - screen_lines) : 0;
+                if (scroll_offset > max_scroll) scroll_offset = max_scroll;
+                
+            after_command:
+                ;
+            }
+
+            
+            else if (cmd[0] == 'a') {
+                // Append command: 'a <text>' (exactly one space after 'a', then text)
+                char *p = cmd + 1; // points after 'a'
+            
+                // Check for exactly one space after 'a'
+                if (*p != ' ') {
+                    draw_buffer();
+                    printf(": Invalid append syntax. Use: a <text>\n");
+                    fflush(stdout);
+                    goto after_command_a;
+                }
+                p++; // move past that one space
+            
+                // Everything after that space is input text (including multiple spaces)
+                char *input_text = p;
+            
+                if (*input_text == '\0') {
+                    draw_buffer();
+                    printf(": No text to append. Use: a <text>\n");
+                    fflush(stdout);
+                    goto after_command_a;
+                }
+            
+                // Append at the end (line_count + 1)
+                insert_line(line_count + 1, input_text);
+            
+                struct winsize w;
+                ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+                size_t screen_lines = (w.ws_row > 3) ? (w.ws_row - 3) : 1;
+            
+                if (line_count > scroll_offset + screen_lines)
+                    scroll_offset = line_count - screen_lines;
+            
+                size_t max_scroll = (line_count > screen_lines) ? (line_count - screen_lines) : 0;
+                if (scroll_offset > max_scroll) scroll_offset = max_scroll;
+            
+            after_command_a:
+                ;
+            }
+            
+            
+            else if (cmd[0] == 'd') {
                 int line_no;
                 if (sscanf(cmd, "d %d", &line_no) == 1)
                     delete_line((size_t)line_no);

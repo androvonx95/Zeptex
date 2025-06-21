@@ -51,6 +51,6 @@ i am broke af she aint getting nothing from me bruh
 haha that true 
 maybe this project make me rich i can already see the cash
 me too bruh
-gcc -Wall -Wextra -o editor_view editor_view.c
+gcc -Wall -Wextra -o editor editor.c
 new line
 jello
