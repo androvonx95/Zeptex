@@ -89,17 +89,6 @@ void insert_line(size_t index, const char *text) {
         lines[i] = lines[i - 1];
     lines[index - 1] = strdup(text);
     line_count++;
-    
-    // Adjust scroll offset if needed
-    struct winsize w;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-    size_t screen_lines = (w.ws_row > 4) ? (w.ws_row - 4) : 1; // Adjusted for new header
-    
-    if ((size_t)index > scroll_offset + screen_lines)
-        scroll_offset = (size_t)index - screen_lines;
-    
-    size_t max_scroll = (line_count > screen_lines) ? (line_count - screen_lines) : 0;
-    if (scroll_offset > max_scroll) scroll_offset = max_scroll;
 }
 
 void delete_line(size_t index) {
@@ -119,9 +108,8 @@ void draw_command_bar() {
     ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
     int width = w.ws_col;
 
-    const char *title = "ZEPTEX EDITOR version 1.0\n";
 
-    const char *cmds[] = { title , "i N TEXT -- insert line|", "d N -- delete line|", "↑/↓ scroll|", "w <filename> -- save|", "q -- Quit|" };
+    const char *cmds[] = { "i N TEXT -- insert line|", "d N -- delete line|", "↑/↓ scroll|", "w <filename> -- save|", "q -- Quit|" };
     int cmd_count = sizeof(cmds) / sizeof(cmds[0]);
 
     int total_cmd_len = 0;
@@ -152,17 +140,18 @@ void draw_buffer() {
     if (padding < 0) padding = 0;
 
     // // Print header line (fixed top)
-    // printf("%*s\033[1;97m%s\033[0m\n\n", padding > 0 ? padding : 0, "", title);
+    printf("%*s\033[1;97m%s\033[0m\n\n", padding > 0 ? padding : 0, "", title);
 
     // Calculate how many lines fit below header and above command bar
     // Header = 2 lines (title + blank), Command bar = 1 line, so:
-    size_t usable_rows = (w.ws_row > 4) ? (w.ws_row - 4) : 1;
+    size_t usable_rows = (w.ws_row > 5) ? (w.ws_row - 5) : 1;
 
     // Clamp scroll_offset to valid range (cannot scroll beyond start or end)
     size_t max_scroll = (line_count > usable_rows) ? (line_count - usable_rows) : 0;
     if (scroll_offset > max_scroll) scroll_offset = max_scroll;
 
     // Draw visible text lines
+
     for (size_t i = 0; i < usable_rows; ++i) {
         size_t line_index = i + scroll_offset;
         if (line_index < line_count) {
@@ -309,9 +298,6 @@ void run_editor(const char *filename) {
             
                 // Append at the end (line_count + 1)
                 insert_line(line_count + 1, input_text);
-                
-                // Draw buffer to show changes
-                draw_buffer();
             
                 struct winsize w;
                 ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
@@ -382,8 +368,8 @@ int main(int argc, char **argv) {
     const char *filename = NULL;
     if (argc > 1) filename = argv[1];
 
-    // Alt screen (keep cursor visible)
-    printf("\033[?1049h");
+    // Alt screen & cursor off
+    printf("\033[?1049h\033[?25l");
 
     enable_raw_mode();
 
@@ -395,8 +381,8 @@ int main(int argc, char **argv) {
 
     disable_raw_mode();
 
-    // Restore screen (keep cursor visible)
-    printf("\033[?1049l");
+    // Restore screen
+    printf("\033[?1049l\033[?25h");
 
     for (size_t i = 0; i < line_count; ++i) free(lines[i]);
 
