@@ -20,36 +20,41 @@ struct termios orig_termios;
 
 volatile sig_atomic_t resize_flag = 0;  // flag set by SIGWINCH handler
 
-// ========== RAW MODE ==========
+// Terminal raw mode handling
 
+// Restore terminal settings to normal
 void disable_raw_mode() {
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
 }
 
+// Enable raw terminal mode for direct input handling
 void enable_raw_mode() {
     tcgetattr(STDIN_FILENO, &orig_termios);
     atexit(disable_raw_mode);
 
     struct termios raw = orig_termios;
-    raw.c_lflag &= ~(ECHO | ICANON);
-    raw.c_cc[VMIN] = 1;
-    raw.c_cc[VTIME] = 0;
+    raw.c_lflag &= ~(ECHO | ICANON);  // Disable echo and canonical mode
+    raw.c_cc[VMIN] = 1;              // Minimum number of bytes to read
+    raw.c_cc[VTIME] = 0;             // No timeout
 
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
 
-// ========== SIGNAL HANDLER ==========
+// Window resize handling
 
+// Handle window resize signal
 void handle_resize(int sig) {
-    (void)sig; // unused parameter
+    (void)sig;
     resize_flag = 1;
 }
 
+// Set up window resize signal handler
 void setup_sigwinch_handler() {
-    struct sigaction sa;
-    sa.sa_handler = handle_resize;
+    struct sigaction sa = {
+        .sa_handler = handle_resize,
+        .sa_flags = 0
+    };
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0; // no SA_RESTART so read() is interrupted
 
     if (sigaction(SIGWINCH, &sa, NULL) == -1) {
         perror("sigaction");
@@ -57,8 +62,9 @@ void setup_sigwinch_handler() {
     }
 }
 
-// ========== FILE OPS ==========
+// File operations
 
+// Load file content into editor buffer
 void load_file(const char *filename) {
     FILE *f = fopen(filename, "r");
     if (!f) return;
@@ -72,6 +78,7 @@ void load_file(const char *filename) {
     fclose(f);
 }
 
+// Save editor content to file
 void save_file(const char *filename) {
     FILE *f = fopen(filename, "w");
     if (!f) return;
@@ -81,8 +88,9 @@ void save_file(const char *filename) {
     fclose(f);
 }
 
-// ========== BUFFER OPS ==========
+// Buffer operations
 
+// Insert a new line at specified index
 void insert_line(size_t index, const char *text) {
     if (line_count >= MAX_LINES || index == 0 || index > line_count + 1) return;
     for (size_t i = line_count; i >= index; --i)
@@ -91,6 +99,7 @@ void insert_line(size_t index, const char *text) {
     line_count++;
 }
 
+// Delete line at specified index
 void delete_line(size_t index) {
     if (index == 0 || index > line_count) return;
     free(lines[index - 1]);
@@ -101,15 +110,21 @@ void delete_line(size_t index) {
         scroll_offset = line_count ? line_count - 1 : 0;
 }
 
-// ========== DISPLAY ==========
+// Display functions
 
+// Draw command bar with editor commands
 void draw_command_bar() {
     struct winsize w;
     ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
     int width = w.ws_col;
 
-
-    const char *cmds[] = { "i N TEXT -- insert line|", "d N -- delete line|", "↑/↓ scroll|", "w <filename> -- save|", "q -- Quit|" };
+    const char *cmds[] = {
+        "i N TEXT -- insert line|",
+        "d N -- delete line|",
+        "↑/↓ scroll|",
+        "w <filename> -- save|",
+        "q -- Quit|"
+    };
     int cmd_count = sizeof(cmds) / sizeof(cmds[0]);
 
     int total_cmd_len = 0;
@@ -128,8 +143,8 @@ void draw_command_bar() {
     printf("\n");
 }
 
+// Draw main editor buffer with title and content
 void draw_buffer() {
-    // Clear screen and move cursor to top-left corner
     printf("\033[H\033[J");
 
     struct winsize w;
@@ -139,49 +154,34 @@ void draw_buffer() {
     int padding = (w.ws_col - (int)strlen(title)) / 2;
     if (padding < 0) padding = 0;
 
-    // // Print header line (fixed top)
     printf("%*s\033[1;97m%s\033[0m\n\n", padding > 0 ? padding : 0, "", title);
 
-    // Calculate how many lines fit below header and above command bar
-    // Header = 2 lines (title + blank), Command bar = 1 line, so:
     size_t usable_rows = (w.ws_row > 5) ? (w.ws_row - 5) : 1;
 
-    // Clamp scroll_offset to valid range (cannot scroll beyond start or end)
     size_t max_scroll = (line_count > usable_rows) ? (line_count - usable_rows) : 0;
     if (scroll_offset > max_scroll) scroll_offset = max_scroll;
-
-    // Draw visible text lines
 
     for (size_t i = 0; i < usable_rows; ++i) {
         size_t line_index = i + scroll_offset;
         if (line_index < line_count) {
             printf("%3zu | %s\n", line_index + 1, lines[line_index]);
         } else {
-            // Empty line if no content (prevents leftover text artifacts)
             printf("~\n");
         }
     }
 
-    // printf("%*s\033[1;97m%s\033[0m\n\n", padding > 0 ? padding : 0, "", title);
-    // printf("\033[1;97m%s\033[0m\n\n", title);
-
-
-    // Draw command bar at bottom line (fixed)
     draw_command_bar();
-
-    // Flush output immediately
     fflush(stdout);
 }
 
 
 
 
-// ========== MAIN LOOP ==========
+// Main editor loop
 void run_editor(const char *filename) {
     char cmd[MAX_LINE_LEN] = {0};
     size_t cmd_len = 0;
 
-    // Draw initial screen and prompt
     draw_buffer();
     printf(": ");
     fflush(stdout);
